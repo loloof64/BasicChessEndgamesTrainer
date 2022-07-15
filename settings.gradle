@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Basic Chess Endgames"
 include ':app'
+include ':chessboard'

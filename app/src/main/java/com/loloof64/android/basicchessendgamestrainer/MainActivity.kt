@@ -10,7 +10,9 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.loloof64.android.basicchessendgamestrainer.ui.theme.BasicChessEndgamesTheme
+import com.loloof64.android.chessboard.ui.ChessBoard
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,4 +42,10 @@ fun DefaultPreview() {
     BasicChessEndgamesTheme {
         Greeting("Android")
     }
+}
+
+@Preview
+@Composable
+fun ChessBoardPreview() {
+    ChessBoard(300.dp)
 }
