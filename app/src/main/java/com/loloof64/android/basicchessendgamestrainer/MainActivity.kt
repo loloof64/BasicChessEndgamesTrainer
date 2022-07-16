@@ -55,7 +55,6 @@ fun DefaultPreview() {
 @Composable
 fun ChessBoardPreview() {
     val boardParameters = ChessBoardParametersBuilder()
-        .setBackgroundColorTo(Color.Yellow)
         .setTotalSizeTo(300.dp)
         .build()
 
