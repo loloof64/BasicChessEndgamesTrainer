@@ -129,9 +129,15 @@ class ChessBoardState(currentPositionFen: String, oldPositions: List<String> = l
         val boardLines = innerBoard.fen.split(" ")[0].split("/")
 
         for ((lineCounter, line) in boardLines.withIndex()) {
-            for ((colCounter, elem) in line.toCharArray().withIndex()) {
+            var colCounter = 0
+            for (elem in line.toCharArray()) {
                 if (elem.isLetter()) {
                     values[lineCounter][colCounter] = elem
+                    colCounter++
+                }
+                else {
+                    val holes = elem.digitToInt()
+                    colCounter += holes
                 }
             }
         }
@@ -164,10 +170,11 @@ fun rememberChessBoardState(initialPositionFen: String): ChessBoardState =
 @Composable
 fun ChessBoard(
     modifier: Modifier = Modifier,
+    initialPositionFen: String = Constants.startStandardFENPosition,
     parameters: ChessBoardParameters
 ) {
     val chessBoardState =
-        rememberChessBoardState(initialPositionFen = Constants.startStandardFENPosition)
+        rememberChessBoardState(initialPositionFen = initialPositionFen)
 
     Surface(
         modifier = modifier
