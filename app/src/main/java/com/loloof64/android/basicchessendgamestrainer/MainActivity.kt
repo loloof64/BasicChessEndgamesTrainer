@@ -12,6 +12,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.loloof64.android.basicchessendgamestrainer.ui.theme.BasicChessEndgamesTheme
@@ -40,19 +41,17 @@ fun Greeting(name: String) {
     Text(text = "Hello $name!")
 }
 
-@Preview(showBackground = true)
-@Composable
-fun DefaultPreview() {
-    BasicChessEndgamesTheme {
-        Greeting("Android")
-    }
-}
-
 @Preview
 @Composable
 fun ChessBoardPreview() {
+    val configuration = LocalConfiguration.current
+    val widthDp = configuration.screenWidthDp.dp
+    val heightDp = configuration.screenHeightDp.dp
+
+    val boardSize = if (widthDp < heightDp) widthDp else (heightDp * 0.8f)
+
     val boardParameters = ChessBoardParametersBuilder()
-        .setTotalSizeTo(300.dp)
+        .setTotalSizeTo(boardSize)
         .build()
 
     Row(

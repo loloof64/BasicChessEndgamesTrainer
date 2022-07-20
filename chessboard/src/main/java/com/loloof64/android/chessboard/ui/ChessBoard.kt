@@ -1,21 +1,25 @@
 package com.loloof64.android.chessboard.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.consumeAllChanges
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.Constants
@@ -69,7 +73,7 @@ class ChessBoardParametersBuilder {
     var totalSize: Dp = 100.dp
     var backgroundColor = Color(0xFF795548)
     var whiteCellsColor = Color(0xFFFFF176)
-    var blackCellsColor = Color(0xFF572212)
+    var blackCellsColor = Color(0xFFE65100)
 
     fun setTotalSizeTo(size: Dp): ChessBoardParametersBuilder {
         totalSize = size
@@ -134,8 +138,7 @@ class ChessBoardState(currentPositionFen: String, oldPositions: List<String> = l
                 if (elem.isLetter()) {
                     values[lineCounter][colCounter] = elem
                     colCounter++
-                }
-                else {
+                } else {
                     val holes = elem.digitToInt()
                     colCounter += holes
                 }
@@ -144,6 +147,8 @@ class ChessBoardState(currentPositionFen: String, oldPositions: List<String> = l
 
         return values.map { it.toTypedArray() }.toTypedArray()
     }
+
+    fun isWhiteTurn() = innerBoard.fen.split(" ")[1] == "w"
 
     companion object {
         val Saver: Saver<ChessBoardState, List<String>> = Saver(
@@ -175,27 +180,38 @@ fun ChessBoard(
 ) {
     val chessBoardState =
         rememberChessBoardState(initialPositionFen = initialPositionFen)
+    val offset = parameters.totalSize * 0.0555f
+    val isWhiteTurn = chessBoardState.isWhiteTurn()
+
 
     Surface(
         modifier = modifier
             .requiredSize(parameters.totalSize),
         color = parameters.backgroundColor
     ) {
-        CellsZone(
-            parameters = parameters,
-            cellsValues = chessBoardState.cellsValues(),
-        )
+        Box(
+            modifier = Modifier
+                .offset(offset, offset)
+        ) {
+            CellsZone(
+                parameters = parameters,
+            )
+            PiecesZone(
+                parameters = parameters,
+                piecesValues = chessBoardState.cellsValues(),
+                isWhiteTurn = isWhiteTurn
+            )
+        }
     }
 }
 
 @Composable
 fun CellsZone(
     parameters: ChessBoardParameters,
-    cellsValues: Array<Array<Char>>,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         for (row in 0 until 8) {
             Row {
@@ -203,8 +219,7 @@ fun CellsZone(
                     val isWhiteCell = (row + col) % 2 == 0
                     Cell(
                         parameters = parameters,
-                        isWhiteCell = isWhiteCell,
-                        pieceFen = cellsValues[row][col]
+                        isWhiteCell = isWhiteCell
                     )
                 }
             }
@@ -214,21 +229,155 @@ fun CellsZone(
 
 @Composable
 fun Cell(
+    modifier: Modifier = Modifier,
     parameters: ChessBoardParameters,
     isWhiteCell: Boolean,
-    pieceFen: Char
 ) {
     val cellSize = parameters.totalSize * 0.111f
     val color = if (isWhiteCell) parameters.whiteCellsColor else parameters.blackCellsColor
 
     Surface(
-        modifier = Modifier.requiredSize(cellSize),
+        modifier = modifier.requiredSize(cellSize),
         color = color,
     ) {
-        val vector = drawableFromPieceFen(pieceFen = pieceFen)
-        val contentDescription = contentDescriptionFor(pieceFen = pieceFen)
-        if (vector != null) {
-            Image(imageVector = vector, contentDescription = contentDescription)
+
+    }
+}
+
+@Composable
+fun PiecesZone(
+    modifier: Modifier = Modifier,
+    parameters: ChessBoardParameters,
+    piecesValues: Array<Array<Char>>,
+    isWhiteTurn: Boolean,
+) {
+    val totalSize = parameters.totalSize * 0.8888f
+    val cellSize = parameters.totalSize * 0.111f
+
+    val cellSizePx = with(LocalDensity.current) {
+        cellSize.toPx()
+    }
+
+    var dragLocationX by remember {
+        mutableStateOf(0f)
+    }
+    var dragLocationY by remember {
+        mutableStateOf(0f)
+    }
+    var draggedPieceCol by remember {
+        mutableStateOf<Int?>(null)
+    }
+    var draggedPieceRow by remember {
+        mutableStateOf<Int?>(null)
+    }
+    var dragStarted by remember {
+        mutableStateOf(false)
+    }
+
+    fun handleDragStart(offset: Offset) {
+        val col = (offset.x / cellSizePx).toInt()
+        val row = (offset.y / cellSizePx).toInt()
+
+        val pieceAtCell = piecesValues[row][col]
+        val isNotEmptyCell = pieceAtCell.code > 0
+        val isOurPiece = pieceAtCell.isWhitePiece() == isWhiteTurn
+
+        if (isNotEmptyCell && isOurPiece) {
+            draggedPieceCol = col
+            draggedPieceRow = row
+            dragLocationX = offset.x
+            dragLocationY = offset.y
+            dragStarted = true
         }
+    }
+
+    fun handleDrag(change: PointerInputChange, dragAmount: Offset) {
+        if (!dragStarted) return
+        dragLocationX += dragAmount.x
+        dragLocationY += dragAmount.y
+        change.consumeAllChanges()
+    }
+
+    fun handleDragEnd() {
+        if (dragStarted) {
+
+        }
+        dragLocationX = 0f
+        dragLocationY = 0f
+        draggedPieceCol = null
+        draggedPieceRow = null
+    }
+
+    fun handleDragCancel() {
+        dragLocationX = 0f
+        dragLocationY = 0f
+        draggedPieceCol = null
+        draggedPieceRow = null
+    }
+
+    Box(
+        modifier = modifier
+            .requiredSize(totalSize)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = ::handleDragStart,
+                    onDragEnd = ::handleDragEnd,
+                    onDragCancel = ::handleDragCancel,
+                    onDrag = ::handleDrag
+                )
+            }
+    ) {
+        for ((row, line) in piecesValues.withIndex()) {
+            for ((col, pieceFen) in line.withIndex()) {
+                val x = cellSize * col
+                val y = cellSize * row
+
+                val xPx = with(LocalDensity.current) {
+                    x.toPx()
+                }
+                val yPx = with(LocalDensity.current) {
+                    y.toPx()
+                }
+
+                val isDraggedPiece = (col == draggedPieceCol) && (row == draggedPieceRow)
+                val location =
+                    if (isDraggedPiece) Offset(dragLocationX, dragLocationY) else Offset(xPx, yPx)
+
+                SinglePiece(
+                    modifier = Modifier.size(cellSize),
+                    value = pieceFen,
+                    location = location,
+                )
+            }
+        }
+    }
+}
+
+private fun Char.isWhitePiece(): Boolean =
+    when(this) {
+        'P', 'N', 'B', 'R', 'Q', 'K' -> true
+        'p', 'n', 'b', 'r', 'q', 'k' -> false
+        else -> false
+    }
+
+@Composable
+fun SinglePiece(
+    modifier: Modifier = Modifier,
+    value: Char,
+    location: Offset,
+) {
+    val vector = drawableFromPieceFen(pieceFen = value)
+    val contentDescription = contentDescriptionFor(pieceFen = value)
+
+    if (vector != null) {
+        Image(imageVector = vector, contentDescription = contentDescription,
+            modifier = modifier
+                .offset {
+                    IntOffset(
+                        location.x.toInt(),
+                        location.y.toInt(),
+                    )
+                }
+        )
     }
 }
