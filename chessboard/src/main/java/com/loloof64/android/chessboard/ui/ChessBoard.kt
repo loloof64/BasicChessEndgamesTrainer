@@ -21,9 +21,10 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.github.bhlangonijr.chesslib.Board
-import com.github.bhlangonijr.chesslib.Constants
+import com.github.bhlangonijr.chesslib.*
+import com.github.bhlangonijr.chesslib.move.Move
 import com.loloof64.android.chessboard.R
+import java.util.*
 
 private fun newBoardFromFen(positionFen: String): Board {
     val board = Board()
@@ -116,14 +117,18 @@ class ChessBoardState(currentPositionFen: String, oldPositions: List<String> = l
     private var innerBoard by mutableStateOf(newBoardFromFen(currentPositionFen))
     private val playedPositions = oldPositions.toMutableList()
 
-    // TODO add method playMove which will also update played positions
-
     /**
      * Gets the values of all cells, following board part of Forsyth-Edwards Notation.
      * Each line in the array is matching a rank.
      * The first line is rank 8, and the first column is A.
      */
-    fun cellsValues(): Array<Array<Char>> {
+    var cellsValues by mutableStateOf(computeCellsValues())
+
+    var whiteTurn by mutableStateOf(isWhiteTurn())
+
+    // TODO add method playMove which will also update played positions
+
+    private fun computeCellsValues(): Array<Array<Char>> {
         val values = MutableList(8) {
             MutableList(8) {
                 0.toChar()
@@ -148,7 +153,18 @@ class ChessBoardState(currentPositionFen: String, oldPositions: List<String> = l
         return values.map { it.toTypedArray() }.toTypedArray()
     }
 
-    fun isWhiteTurn() = innerBoard.fen.split(" ")[1] == "w"
+    private fun isWhiteTurn() = innerBoard.fen.split(" ")[1] == "w"
+
+    fun doMove(move: Move): Boolean {
+        val result = innerBoard.doMove(move, true)
+        update()
+        return result
+    }
+
+    private fun update() {
+        cellsValues = computeCellsValues()
+        whiteTurn = isWhiteTurn()
+    }
 
     companion object {
         val Saver: Saver<ChessBoardState, List<String>> = Saver(
@@ -181,28 +197,29 @@ fun ChessBoard(
     val chessBoardState =
         rememberChessBoardState(initialPositionFen = initialPositionFen)
     val offset = parameters.totalSize * 0.0555f
-    val isWhiteTurn = chessBoardState.isWhiteTurn()
 
-
-    Surface(
-        modifier = modifier
-            .requiredSize(parameters.totalSize),
-        color = parameters.backgroundColor
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(offset, offset)
+        Surface(
+            modifier = modifier
+                .requiredSize(parameters.totalSize),
+            color = parameters.backgroundColor
         ) {
-            CellsZone(
-                parameters = parameters,
-            )
-            PiecesZone(
-                parameters = parameters,
-                piecesValues = chessBoardState.cellsValues(),
-                isWhiteTurn = isWhiteTurn
-            )
+            Box(
+                modifier = Modifier
+                    .offset(offset, offset)
+            ) {
+                CellsZone(
+                    parameters = parameters,
+                )
+                PiecesZone(
+                    parameters = parameters,
+                    piecesValues = chessBoardState.cellsValues,
+                    isWhiteTurn = chessBoardState.whiteTurn,
+                    validateMove = {
+                        return@PiecesZone chessBoardState.doMove(it)
+                    }
+                )
+            }
         }
-    }
 }
 
 @Composable
@@ -250,6 +267,7 @@ fun PiecesZone(
     parameters: ChessBoardParameters,
     piecesValues: Array<Array<Char>>,
     isWhiteTurn: Boolean,
+    validateMove: (Move) -> Boolean = {_ -> false},
 ) {
     val totalSize = parameters.totalSize * 0.8888f
     val cellSize = parameters.totalSize * 0.111f
@@ -282,6 +300,10 @@ fun PiecesZone(
         val isNotEmptyCell = pieceAtCell.code > 0
         val isOurPiece = pieceAtCell.isWhitePiece() == isWhiteTurn
 
+        ///////////////////////////////////
+        println("Drag start: $isWhiteTurn")
+        ///////////////////////////////////
+
         if (isNotEmptyCell && isOurPiece) {
             draggedPieceCol = col
             draggedPieceRow = row
@@ -300,12 +322,27 @@ fun PiecesZone(
 
     fun handleDragEnd() {
         if (dragStarted) {
+            val draggedPieceEndCol = (dragLocationX / cellSizePx).toInt()
+            val draggedPieceEndRow = (dragLocationY / cellSizePx).toInt()
 
+            val inRange = draggedPieceEndCol in 0..7 && draggedPieceEndRow in 0..7
+            if (inRange) {
+                val startFile = draggedPieceCol!!
+                val startRank = 7 - draggedPieceRow!!
+                val endFile = draggedPieceEndCol
+                val endRank = 7 - draggedPieceEndRow
+
+                val startSquare = Square.encode(Rank.values()[startRank], File.values()[startFile])
+                val endSquare = Square.encode(Rank.values()[endRank], File.values()[endFile])
+                val move = Move(startSquare, endSquare)
+                validateMove(move)
+            }
         }
         dragLocationX = 0f
         dragLocationY = 0f
         draggedPieceCol = null
         draggedPieceRow = null
+        dragStarted = false
     }
 
     fun handleDragCancel() {
@@ -313,6 +350,7 @@ fun PiecesZone(
         dragLocationY = 0f
         draggedPieceCol = null
         draggedPieceRow = null
+        dragStarted = false
     }
 
     Box(
