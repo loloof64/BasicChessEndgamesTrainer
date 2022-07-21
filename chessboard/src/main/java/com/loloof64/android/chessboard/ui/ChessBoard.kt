@@ -3,6 +3,7 @@ package com.loloof64.android.chessboard.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Surface
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
@@ -157,6 +158,9 @@ class ChessBoardState(currentPositionFen: String, oldPositions: List<String> = l
 
     fun doMove(move: Move): Boolean {
         val result = innerBoard.doMove(move, true)
+        /////////////////////////
+        println(result)
+        ////////////////////////
         update()
         return result
     }
@@ -196,30 +200,63 @@ fun ChessBoard(
 ) {
     val chessBoardState =
         rememberChessBoardState(initialPositionFen = initialPositionFen)
-    val offset = parameters.totalSize * 0.0555f
+    val innerZoneOffset = parameters.totalSize * 0.0555f
+    val playerTurnOffset = parameters.totalSize * 0.4675f
+    val cornerSize = parameters.totalSize * 0.0555f
 
-        Surface(
-            modifier = modifier
-                .requiredSize(parameters.totalSize),
-            color = parameters.backgroundColor
-        ) {
-            Box(
-                modifier = Modifier
-                    .offset(offset, offset)
-            ) {
-                CellsZone(
-                    parameters = parameters,
-                )
-                PiecesZone(
-                    parameters = parameters,
-                    piecesValues = chessBoardState.cellsValues,
-                    isWhiteTurn = chessBoardState.whiteTurn,
-                    validateMove = {
-                        return@PiecesZone chessBoardState.doMove(it)
-                    }
-                )
+    Surface(
+        modifier = modifier
+            .requiredSize(parameters.totalSize),
+        color = parameters.backgroundColor
+    ) {
+        InnerZone(innerZoneOffset, parameters, chessBoardState)
+        PlayerTurn(
+            isWhiteTurn = chessBoardState.whiteTurn,
+            modifier = Modifier
+                .offset(playerTurnOffset, playerTurnOffset)
+                .requiredSize(cornerSize),
+            cornerSize = cornerSize,
+        )
+    }
+}
+
+@Composable
+private fun InnerZone(
+    offset: Dp,
+    chessBoardParameters: ChessBoardParameters,
+    chessBoardState: ChessBoardState
+) {
+    Box(
+        modifier = Modifier
+            .offset(offset, offset)
+    ) {
+        CellsZone(
+            parameters = chessBoardParameters,
+        )
+        PiecesZone(
+            parameters = chessBoardParameters,
+            piecesValues = chessBoardState.cellsValues,
+            isWhiteTurn = chessBoardState.whiteTurn,
+            validateMove = {
+                return@PiecesZone chessBoardState.doMove(it)
             }
-        }
+        )
+    }
+}
+
+@Composable
+fun PlayerTurn(
+    modifier: Modifier = Modifier,
+    isWhiteTurn: Boolean,
+    cornerSize: Dp,
+) {
+    Surface(
+        modifier = modifier,
+        color = if (isWhiteTurn) Color.White else Color.Black,
+        shape = RoundedCornerShape(cornerSize)
+    ) {
+
+    }
 }
 
 @Composable
@@ -267,7 +304,7 @@ fun PiecesZone(
     parameters: ChessBoardParameters,
     piecesValues: Array<Array<Char>>,
     isWhiteTurn: Boolean,
-    validateMove: (Move) -> Boolean = {_ -> false},
+    validateMove: (Move) -> Boolean = { _ -> false },
 ) {
     val totalSize = parameters.totalSize * 0.8888f
     val cellSize = parameters.totalSize * 0.111f
@@ -299,10 +336,6 @@ fun PiecesZone(
         val pieceAtCell = piecesValues[row][col]
         val isNotEmptyCell = pieceAtCell.code > 0
         val isOurPiece = pieceAtCell.isWhitePiece() == isWhiteTurn
-
-        ///////////////////////////////////
-        println("Drag start: $isWhiteTurn")
-        ///////////////////////////////////
 
         if (isNotEmptyCell && isOurPiece) {
             draggedPieceCol = col
@@ -392,7 +425,7 @@ fun PiecesZone(
 }
 
 private fun Char.isWhitePiece(): Boolean =
-    when(this) {
+    when (this) {
         'P', 'N', 'B', 'R', 'Q', 'K' -> true
         'p', 'n', 'b', 'r', 'q', 'k' -> false
         else -> false
