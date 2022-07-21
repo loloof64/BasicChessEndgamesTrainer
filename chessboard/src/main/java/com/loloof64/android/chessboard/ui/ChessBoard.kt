@@ -22,15 +22,17 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.github.bhlangonijr.chesslib.*
-import com.github.bhlangonijr.chesslib.move.Move
 import com.loloof64.android.chessboard.R
-import java.util.*
+import sh.hell.compactchess.exceptions.ChessException
+import sh.hell.compactchess.game.Game
+import sh.hell.compactchess.game.Variant
+import java.util.logging.Logger
 
-private fun newBoardFromFen(positionFen: String): Board {
-    val board = Board()
-    board.loadFromFen(positionFen)
-    return board
+private fun newBoardFromFen(positionFen: String): Game {
+    val game = Game()
+    game.loadFEN(positionFen)
+    game.start()
+    return game
 }
 
 @Composable
@@ -156,13 +158,19 @@ class ChessBoardState(currentPositionFen: String, oldPositions: List<String> = l
 
     private fun isWhiteTurn() = innerBoard.fen.split(" ")[1] == "w"
 
-    fun doMove(move: Move): Boolean {
-        val result = innerBoard.doMove(move, true)
-        /////////////////////////
-        println(result)
-        ////////////////////////
-        update()
-        return result
+    fun doMove(uciMove: String): Boolean {
+        return try {
+            val move = innerBoard.uciMove(uciMove)
+            innerBoard = move.commit()
+            /////////////////////////
+            println(innerBoard.fen)
+            ////////////////////////
+            update()
+            true
+        } catch (ex: ChessException) {
+            Logger.getLogger("loloof64").warning(ex.message)
+            false
+        }
     }
 
     private fun update() {
@@ -195,7 +203,7 @@ fun rememberChessBoardState(initialPositionFen: String): ChessBoardState =
 @Composable
 fun ChessBoard(
     modifier: Modifier = Modifier,
-    initialPositionFen: String = Constants.startStandardFENPosition,
+    initialPositionFen: String = Variant.STANDARD.startFEN,
     parameters: ChessBoardParameters
 ) {
     val chessBoardState =
@@ -304,7 +312,7 @@ fun PiecesZone(
     parameters: ChessBoardParameters,
     piecesValues: Array<Array<Char>>,
     isWhiteTurn: Boolean,
-    validateMove: (Move) -> Boolean = { _ -> false },
+    validateMove: (String) -> Boolean = { _ -> false },
 ) {
     val totalSize = parameters.totalSize * 0.8888f
     val cellSize = parameters.totalSize * 0.111f
@@ -334,10 +342,11 @@ fun PiecesZone(
         val row = (offset.y / cellSizePx).toInt()
 
         val pieceAtCell = piecesValues[row][col]
-        val isNotEmptyCell = pieceAtCell.code > 0
+        val isEmptyCell = pieceAtCell.code == 0
+        if (isEmptyCell) return
         val isOurPiece = pieceAtCell.isWhitePiece() == isWhiteTurn
 
-        if (isNotEmptyCell && isOurPiece) {
+        if (!isEmptyCell && isOurPiece) {
             draggedPieceCol = col
             draggedPieceRow = row
             dragLocationX = offset.x
@@ -365,10 +374,8 @@ fun PiecesZone(
                 val endFile = draggedPieceEndCol
                 val endRank = 7 - draggedPieceEndRow
 
-                val startSquare = Square.encode(Rank.values()[startRank], File.values()[startFile])
-                val endSquare = Square.encode(Rank.values()[endRank], File.values()[endFile])
-                val move = Move(startSquare, endSquare)
-                validateMove(move)
+                val moveUci = "${startFile.fileUci()}${startRank.rankUci()}${endFile.fileUci()}${endRank.rankUci()}"
+                validateMove(moveUci)
             }
         }
         dragLocationX = 0f
@@ -424,11 +431,36 @@ fun PiecesZone(
     }
 }
 
+private fun Int.rankUci(): Char = when(this) {
+    0 -> '1'
+    1 -> '2'
+    2 -> '3'
+    3 -> '4'
+    4 -> '5'
+    5 -> '6'
+    6 -> '7'
+    7 -> '8'
+    else -> throw IllegalArgumentException("Unrecognized rank $this.")
+}
+
+private fun Int.fileUci(): Char = when(this) {
+    0 -> 'a'
+    1 -> 'b'
+    2 -> 'c'
+    3 -> 'd'
+    4 -> 'e'
+    5 -> 'f'
+    6 -> 'g'
+    7 -> 'h'
+    else -> throw IllegalArgumentException("Unrecognized file $this.")
+
+}
+
 private fun Char.isWhitePiece(): Boolean =
     when (this) {
         'P', 'N', 'B', 'R', 'Q', 'K' -> true
         'p', 'n', 'b', 'r', 'q', 'k' -> false
-        else -> false
+        else -> throw IllegalArgumentException("Unrecognized char $this.")
     }
 
 @Composable

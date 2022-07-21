@@ -9,3 +9,7 @@ A chess board component for Jetpack Compose
 The chess pieces vectors have been converted into vector drawables from chess vectors downloaded at
 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces) and designed
 by CBurnett.
+
+### Libraries
+
+Using [Compact Chess](https://github.com/hell-sh/CompactChess) as a dependency.
